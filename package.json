@@ -1,0 +1,38 @@
+{
+  "name": "sqlite-viewer",
+  "version": "1.0.0",
+  "description": "A powerful SQLite database viewer for desktop",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder",
+    "rebuild": "electron-rebuild -f -w better-sqlite3"
+  },
+  "keywords": [
+    "electron",
+    "sqlite",
+    "database",
+    "viewer"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "electron": "^28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.1.2"
+  },
+  "build": {
+    "appId": "com.sqlite.viewer",
+    "productName": "SQLite Viewer",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "npmRebuild": true
+  }
+}

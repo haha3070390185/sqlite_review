@@ -1,0 +1,1732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SQLite Viewer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1e1e1e;
+            --bg-secondary: #252526;
+            --bg-tertiary: #2d2d30;
+            --bg-hover: #3c3c3c;
+            --border-color: #3e3e42;
+            --text-primary: #d4d4d4;
+            --text-secondary: #858585;
+            --text-accent: #569cd6;
+            --text-success: #4ec9b0;
+            --text-warning: #dcdcaa;
+            --text-error: #f44747;
+            --accent-color: #007acc;
+            --table-header-bg: #3c3c3c;
+            --table-row-even: #2a2d2e;
+            --table-row-odd: #252526;
+            --table-row-hover: #094771;
+            --scrollbar-bg: #1e1e1e;
+            --scrollbar-thumb: #424242;
+            --scrollbar-thumb-hover: #4f4f4f;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+            font-size: 13px;
+        }
+
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--scrollbar-bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 5px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover);
+        }
+
+        .app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .toolbar {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            min-height: 32px;
+        }
+
+        .toolbar-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 8px;
+            border-right: 1px solid var(--border-color);
+        }
+
+        .toolbar-group:last-child {
+            border-right: none;
+        }
+
+        .toolbar-btn {
+            background: transparent;
+            border: 1px solid transparent;
+            color: var(--text-primary);
+            padding: 4px 8px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s ease;
+        }
+
+        .toolbar-btn:hover:not(:disabled) {
+            background-color: var(--bg-hover);
+            border-color: var(--border-color);
+        }
+
+        .toolbar-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .toolbar-btn.primary {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .toolbar-btn.primary:hover:not(:disabled) {
+            background-color: #005a9e;
+        }
+
+        .db-info {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .db-info-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .db-info-label {
+            color: var(--text-accent);
+        }
+
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            min-width: 200px;
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .sidebar-header {
+            padding: 8px 12px;
+            background-color: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 4px;
+        }
+
+        .tree-node {
+            user-select: none;
+        }
+
+        .tree-item {
+            display: flex;
+            align-items: center;
+            padding: 4px 8px;
+            cursor: pointer;
+            border-radius: 3px;
+            transition: background-color 0.1s;
+        }
+
+        .tree-item:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .tree-item.active {
+            background-color: var(--table-row-hover);
+            color: white;
+        }
+
+        .tree-icon {
+            width: 16px;
+            height: 16px;
+            margin-right: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .tree-icon.table { color: var(--text-accent); }
+        .tree-icon.view { color: var(--text-success); }
+        .tree-icon.index { color: var(--text-warning); }
+        .tree-icon.trigger { color: var(--text-error); }
+        .tree-icon.folder { color: var(--text-secondary); }
+
+        .tree-label {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .tree-badge {
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            padding: 1px 6px;
+            border-radius: 8px;
+            font-size: 10px;
+            margin-left: 4px;
+        }
+
+        .tree-children {
+            margin-left: 12px;
+            border-left: 1px solid var(--border-color);
+        }
+
+        .tree-toggle {
+            width: 12px;
+            height: 12px;
+            margin-right: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            color: var(--text-secondary);
+        }
+
+        .center-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tabs {
+            display: flex;
+            background-color: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            overflow-x: auto;
+        }
+
+        .tab {
+            padding: 8px 16px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            font-size: 12px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s;
+        }
+
+        .tab:hover {
+            background-color: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            border-bottom-color: var(--accent-color);
+            color: var(--text-primary);
+            background-color: var(--bg-primary);
+        }
+
+        .tab-close {
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 3px;
+            opacity: 0;
+            transition: opacity 0.15s;
+        }
+
+        .tab:hover .tab-close {
+            opacity: 1;
+        }
+
+        .tab-close:hover {
+            background-color: var(--text-error);
+        }
+
+        .tab-content {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tab-panel {
+            flex: 1;
+            display: none;
+            overflow: hidden;
+        }
+
+        .tab-panel.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .welcome-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+        }
+
+        .welcome-icon {
+            font-size: 64px;
+            margin-bottom: 24px;
+            opacity: 0.5;
+        }
+
+        .welcome-title {
+            font-size: 24px;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .welcome-subtitle {
+            font-size: 14px;
+            margin-bottom: 32px;
+        }
+
+        .welcome-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .welcome-btn {
+            padding: 12px 24px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 13px;
+            transition: all 0.15s;
+        }
+
+        .welcome-btn:hover {
+            background-color: var(--bg-hover);
+            border-color: var(--accent-color);
+        }
+
+        .welcome-btn.primary {
+            background-color: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+        }
+
+        .welcome-btn.primary:hover {
+            background-color: #005a9e;
+        }
+
+        .table-container {
+            flex: 1;
+            overflow: auto;
+            position: relative;
+        }
+
+        .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .data-table th,
+        .data-table td {
+            padding: 6px 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            border-right: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .data-table th:last-child,
+        .data-table td:last-child {
+            border-right: none;
+        }
+
+        .data-table th {
+            background-color: var(--table-header-bg);
+            color: var(--text-accent);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .data-table th:hover {
+            background-color: var(--bg-hover);
+        }
+
+        .data-table th.sorted-asc::after {
+            content: ' ▲';
+        }
+
+        .data-table th.sorted-desc::after {
+            content: ' ▼';
+        }
+
+        .data-table tr:nth-child(even) {
+            background-color: var(--table-row-even);
+        }
+
+        .data-table tr:nth-child(odd) {
+            background-color: var(--table-row-odd);
+        }
+
+        .data-table tr:hover {
+            background-color: var(--table-row-hover) !important;
+        }
+
+        .data-table td {
+            max-width: 200px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .data-table td.null-value {
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        .data-table td.number-value {
+            color: var(--text-success);
+        }
+
+        .data-table td.blob-value {
+            color: var(--text-warning);
+        }
+
+        .pagination {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 12px;
+            background-color: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            font-size: 12px;
+        }
+
+        .pagination-info {
+            color: var(--text-secondary);
+        }
+
+        .pagination-controls {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .pagination-btn {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 4px 10px;
+            border-radius: 3px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 12px;
+            transition: all 0.1s;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background-color: var(--bg-hover);
+            border-color: var(--accent-color);
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .pagination-input {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 4px 8px;
+            border-radius: 3px;
+            width: 60px;
+            font-family: inherit;
+            font-size: 12px;
+            text-align: center;
+        }
+
+        .pagination-input:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .sql-editor-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sql-toolbar {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            padding: 4px 8px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .sql-editor {
+            flex: 1;
+            background-color: var(--bg-primary);
+            border: none;
+            color: var(--text-primary);
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+            padding: 12px;
+            resize: none;
+            outline: none;
+        }
+
+        .sql-editor::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .sql-results {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sql-results-header {
+            background-color: var(--bg-tertiary);
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+
+        .sql-results-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .sql-status-success {
+            color: var(--text-success);
+        }
+
+        .sql-status-error {
+            color: var(--text-error);
+        }
+
+        .sql-results-table {
+            flex: 1;
+            overflow: auto;
+        }
+
+        .sql-results-empty {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .sql-split {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .sql-split-top {
+            flex: 1;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .sql-split-bottom {
+            height: 40%;
+            min-height: 100px;
+            display: flex;
+            flex-direction: column;
+            border-top: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .right-panel {
+            width: 320px;
+            min-width: 200px;
+            background-color: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .right-panel-header {
+            padding: 8px 12px;
+            background-color: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            font-weight: bold;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+
+        .right-panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .property-group {
+            margin-bottom: 16px;
+        }
+
+        .property-group-title {
+            color: var(--text-accent);
+            font-size: 12px;
+            font-weight: 600;
+            padding: 4px 0;
+            border-bottom: 1px solid var(--border-color);
+            margin-bottom: 8px;
+        }
+
+        .property-item {
+            display: flex;
+            padding: 4px 0;
+            font-size: 12px;
+        }
+
+        .property-label {
+            width: 80px;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .property-value {
+            flex: 1;
+            color: var(--text-primary);
+            word-break: break-all;
+        }
+
+        .schema-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 11px;
+        }
+
+        .schema-table th,
+        .schema-table td {
+            padding: 4px 6px;
+            border-bottom: 1px solid var(--border-color);
+            text-align: left;
+        }
+
+        .schema-table th {
+            color: var(--text-secondary);
+            font-weight: normal;
+        }
+
+        .schema-table td {
+            color: var(--text-primary);
+        }
+
+        .pk-indicator {
+            color: var(--text-warning);
+            font-size: 10px;
+        }
+
+        .search-box {
+            padding: 8px;
+            background-color: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .search-input {
+            width: 100%;
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 6px 10px;
+            border-radius: 3px;
+            font-family: inherit;
+            font-size: 12px;
+            outline: none;
+        }
+
+        .search-input:focus {
+            border-color: var(--accent-color);
+        }
+
+        .search-input::placeholder {
+            color: var(--text-secondary);
+        }
+
+        .context-menu {
+            position: fixed;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            z-index: 1000;
+            min-width: 160px;
+            padding: 4px 0;
+        }
+
+        .context-menu-item {
+            padding: 6px 16px;
+            cursor: pointer;
+            font-size: 12px;
+            color: var(--text-primary);
+        }
+
+        .context-menu-item:hover {
+            background-color: var(--accent-color);
+            color: white;
+        }
+
+        .context-menu-item.disabled {
+            color: var(--text-secondary);
+            cursor: not-allowed;
+        }
+
+        .context-menu-divider {
+            height: 1px;
+            background-color: var(--border-color);
+            margin: 4px 0;
+        }
+
+        .code-block {
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 8px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 11px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: var(--text-success);
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .splitter {
+            width: 4px;
+            background-color: var(--border-color);
+            cursor: col-resize;
+            transition: background-color 0.15s;
+        }
+
+        .splitter:hover,
+        .splitter.active {
+            background-color: var(--accent-color);
+        }
+
+        .row-number {
+            color: var(--text-secondary);
+            font-size: 11px;
+            text-align: right;
+            user-select: none;
+        }
+
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
+        .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            padding: 12px 20px;
+            color: var(--text-primary);
+            font-size: 13px;
+            z-index: 2000;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+            animation: slideIn 0.2s ease;
+        }
+
+        .toast.success {
+            border-left: 4px solid var(--text-success);
+        }
+
+        .toast.error {
+            border-left: 4px solid var(--text-error);
+        }
+
+        .toast.warning {
+            border-left: 4px solid var(--text-warning);
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <div class="toolbar">
+            <div class="toolbar-group">
+                <button class="toolbar-btn primary" id="btn-open-db" title="打开数据库 (Ctrl+O)">
+                    <span>📂</span> 打开数据库
+                </button>
+                <button class="toolbar-btn" id="btn-close-db" title="关闭数据库 (Ctrl+W)" disabled>
+                    <span>🔒</span> 关闭
+                </button>
+            </div>
+            <div class="toolbar-group">
+                <button class="toolbar-btn" id="btn-refresh" title="刷新 (F5)" disabled>
+                    <span>🔄</span> 刷新
+                </button>
+                <button class="toolbar-btn" id="btn-export" title="导出为CSV" disabled>
+                    <span>📤</span> 导出
+                </button>
+            </div>
+            <div class="db-info" id="db-info">
+                <div class="db-info-item">
+                    <span class="db-info-label">数据库:</span>
+                    <span id="db-name">未连接</span>
+                </div>
+                <div class="db-info-item" id="db-size-container" style="display: none;">
+                    <span class="db-info-label">大小:</span>
+                    <span id="db-size">-</span>
+                </div>
+                <div class="db-info-item" id="db-tables-container" style="display: none;">
+                    <span class="db-info-label">表:</span>
+                    <span id="db-tables-count">0</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div class="sidebar" id="sidebar">
+                <div class="search-box">
+                    <input type="text" class="search-input" id="search-tables" placeholder="搜索表...">
+                </div>
+                <div class="sidebar-content" id="sidebar-content">
+                    <div class="welcome-screen">
+                        <div class="welcome-icon">🗄️</div>
+                        <div class="welcome-subtitle">打开数据库以查看结构</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="center-panel">
+                <div class="tabs" id="tabs">
+                    <div class="tab active" data-tab="welcome">
+                        <span>🏠</span> 欢迎
+                    </div>
+                </div>
+
+                <div class="tab-content">
+                    <div class="tab-panel active" id="panel-welcome">
+                        <div class="welcome-screen">
+                            <div class="welcome-icon">💾</div>
+                            <div class="welcome-title">SQLite Viewer</div>
+                            <div class="welcome-subtitle">一个功能强大的 SQLite 数据库查看器</div>
+                            <div class="welcome-actions">
+                                <button class="welcome-btn primary" id="welcome-open-btn">打开数据库</button>
+                                <button class="welcome-btn" id="welcome-create-btn">新建数据库</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-panel" id="panel-query">
+                        <div class="sql-split">
+                            <div class="sql-split-top">
+                                <div class="sql-toolbar">
+                                    <button class="toolbar-btn primary" id="btn-execute-sql" title="执行 (F9)">
+                                        <span>▶</span> 执行
+                                    </button>
+                                    <button class="toolbar-btn" id="btn-format-sql" title="格式化">
+                                        <span>📝</span> 格式化
+                                    </button>
+                                    <button class="toolbar-btn" id="btn-clear-sql" title="清空">
+                                        <span>🗑️</span> 清空
+                                    </button>
+                                </div>
+                                <textarea class="sql-editor" id="sql-editor" placeholder="输入 SQL 语句...
+例如: SELECT * FROM table_name LIMIT 100;"></textarea>
+                            </div>
+                            <div class="sql-split-bottom">
+                                <div class="sql-results-header">
+                                    <div class="sql-results-status" id="sql-status">
+                                        等待执行...
+                                    </div>
+                                    <div class="sql-results-actions">
+                                        <button class="toolbar-btn" id="btn-copy-results" title="复制结果" style="font-size: 11px;">复制</button>
+                                    </div>
+                                </div>
+                                <div class="sql-results-table" id="sql-results-container">
+                                    <div class="sql-results-empty" id="sql-results-empty">
+                                        执行 SQL 后结果将显示在这里
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="right-panel" id="right-panel">
+                <div class="right-panel-header">属性</div>
+                <div class="right-panel-content" id="property-panel">
+                    <div class="property-group">
+                        <div class="property-group-title">数据库信息</div>
+                        <div class="property-item">
+                            <div class="property-label">名称</div>
+                            <div class="property-value" id="prop-db-name">-</div>
+                        </div>
+                        <div class="property-item">
+                            <div class="property-label">路径</div>
+                            <div class="property-value" id="prop-db-path">-</div>
+                        </div>
+                        <div class="property-item">
+                            <div class="property-label">大小</div>
+                            <div class="property-value" id="prop-db-size">-</div>
+                        </div>
+                    </div>
+                    <div class="property-group" id="table-props-group" style="display: none;">
+                        <div class="property-group-title">表信息</div>
+                        <div class="property-item">
+                            <div class="property-label">表名</div>
+                            <div class="property-value" id="prop-table-name">-</div>
+                        </div>
+                        <div class="property-item">
+                            <div class="property-label">类型</div>
+                            <div class="property-value" id="prop-table-type">-</div>
+                        </div>
+                        <div class="property-item">
+                            <div class="property-label">行数</div>
+                            <div class="property-value" id="prop-table-rows">-</div>
+                        </div>
+                    </div>
+                    <div class="property-group" id="schema-group" style="display: none;">
+                        <div class="property-group-title">表结构</div>
+                        <div id="schema-table-container"></div>
+                    </div>
+                    <div class="property-group" id="create-sql-group" style="display: none;">
+                        <div class="property-group-title">创建语句</div>
+                        <div class="code-block" id="create-sql-code">-</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentDatabase = null;
+        let currentTable = null;
+        let currentTableData = null;
+        let currentPage = 1;
+        let pageSize = 100;
+        let sortColumn = null;
+        let sortOrder = 'asc';
+        let tabs = [];
+        let activeTab = 'welcome';
+
+        const elements = {
+            btnOpenDb: document.getElementById('btn-open-db'),
+            btnCloseDb: document.getElementById('btn-close-db'),
+            btnRefresh: document.getElementById('btn-refresh'),
+            btnExport: document.getElementById('btn-export'),
+            btnExecuteSql: document.getElementById('btn-execute-sql'),
+            btnFormatSql: document.getElementById('btn-format-sql'),
+            btnClearSql: document.getElementById('btn-clear-sql'),
+            btnCopyResults: document.getElementById('btn-copy-results'),
+            welcomeOpenBtn: document.getElementById('welcome-open-btn'),
+            welcomeCreateBtn: document.getElementById('welcome-create-btn'),
+            dbName: document.getElementById('db-name'),
+            dbSize: document.getElementById('db-size'),
+            dbTablesCount: document.getElementById('db-tables-count'),
+            dbSizeContainer: document.getElementById('db-size-container'),
+            dbTablesContainer: document.getElementById('db-tables-container'),
+            sidebarContent: document.getElementById('sidebar-content'),
+            searchTables: document.getElementById('search-tables'),
+            sqlEditor: document.getElementById('sql-editor'),
+            sqlStatus: document.getElementById('sql-status'),
+            sqlResultsContainer: document.getElementById('sql-results-container'),
+            sqlResultsEmpty: document.getElementById('sql-results-empty'),
+            propertyPanel: document.getElementById('property-panel'),
+            propDbName: document.getElementById('prop-db-name'),
+            propDbPath: document.getElementById('prop-db-path'),
+            propDbSize: document.getElementById('prop-db-size'),
+            propTableName: document.getElementById('prop-table-name'),
+            propTableType: document.getElementById('prop-table-type'),
+            propTableRows: document.getElementById('prop-table-rows'),
+            tablePropsGroup: document.getElementById('table-props-group'),
+            schemaGroup: document.getElementById('schema-group'),
+            schemaTableContainer: document.getElementById('schema-table-container'),
+            createSqlGroup: document.getElementById('create-sql-group'),
+            createSqlCode: document.getElementById('create-sql-code'),
+            tabsContainer: document.getElementById('tabs'),
+            panelWelcome: document.getElementById('panel-welcome'),
+            panelQuery: document.getElementById('panel-query')
+        };
+
+        function init() {
+            setupEventListeners();
+            setupIpcListeners();
+        }
+
+        function setupEventListeners() {
+            elements.btnOpenDb.addEventListener('click', openDatabase);
+            elements.welcomeOpenBtn.addEventListener('click', openDatabase);
+            elements.btnCloseDb.addEventListener('click', closeDatabase);
+            elements.btnRefresh.addEventListener('click', refreshDatabase);
+            elements.btnExport.addEventListener('click', exportTable);
+            elements.btnExecuteSql.addEventListener('click', executeSql);
+            elements.btnClearSql.addEventListener('click', () => {
+                elements.sqlEditor.value = '';
+            });
+            elements.btnCopyResults.addEventListener('click', copyResults);
+            elements.searchTables.addEventListener('input', filterTables);
+            
+            elements.tabsContainer.addEventListener('click', (e) => {
+                const tab = e.target.closest('.tab');
+                if (tab) {
+                    const tabId = tab.dataset.tab;
+                    if (tabId) {
+                        switchTab(tabId);
+                    }
+                }
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'o') {
+                    e.preventDefault();
+                    openDatabase();
+                }
+                if (e.key === 'F9') {
+                    e.preventDefault();
+                    executeSql();
+                }
+                if (e.key === 'F5') {
+                    e.preventDefault();
+                    refreshDatabase();
+                }
+            });
+
+            elements.sqlEditor.addEventListener('keydown', (e) => {
+                if (e.ctrlKey && e.key === 'Enter') {
+                    e.preventDefault();
+                    executeSql();
+                }
+            });
+        }
+
+        function setupIpcListeners() {
+            if (window.sqliteAPI) {
+                window.sqliteAPI.onDatabaseOpened(async (dbInfo) => {
+                    await loadDatabaseInfo();
+                });
+                window.sqliteAPI.onDatabaseClosed(() => {
+                    handleDatabaseClosed();
+                });
+            }
+        }
+
+        async function openDatabase() {
+            if (window.sqliteAPI) {
+                await window.sqliteAPI.openDatabase();
+            }
+        }
+
+        async function loadDatabaseInfo() {
+            if (!window.sqliteAPI) return;
+            
+            const info = await window.sqliteAPI.getDatabaseInfo();
+            if (!info) return;
+
+            currentDatabase = info;
+            
+            elements.dbName.textContent = info.name;
+            elements.dbSize.textContent = info.sizeFormatted;
+            elements.dbTablesCount.textContent = info.tables.length;
+            elements.dbSizeContainer.style.display = 'flex';
+            elements.dbTablesContainer.style.display = 'flex';
+            
+            elements.propDbName.textContent = info.name;
+            elements.propDbPath.textContent = info.path;
+            elements.propDbSize.textContent = info.sizeFormatted;
+
+            elements.btnCloseDb.disabled = false;
+            elements.btnRefresh.disabled = false;
+
+            renderSidebar(info);
+            addQueryTab();
+
+            showToast('数据库已打开', 'success');
+        }
+
+        function closeDatabase() {
+            if (window.sqliteAPI) {
+                window.sqliteAPI.closeDatabase();
+            }
+        }
+
+        function handleDatabaseClosed() {
+            currentDatabase = null;
+            currentTable = null;
+            
+            elements.dbName.textContent = '未连接';
+            elements.dbSizeContainer.style.display = 'none';
+            elements.dbTablesContainer.style.display = 'none';
+            
+            elements.propDbName.textContent = '-';
+            elements.propDbPath.textContent = '-';
+            elements.propDbSize.textContent = '-';
+            elements.tablePropsGroup.style.display = 'none';
+            elements.schemaGroup.style.display = 'none';
+            elements.createSqlGroup.style.display = 'none';
+
+            elements.btnCloseDb.disabled = true;
+            elements.btnRefresh.disabled = true;
+            elements.btnExport.disabled = true;
+
+            elements.sidebarContent.innerHTML = `
+                <div class="welcome-screen">
+                    <div class="welcome-icon">🗄️</div>
+                    <div class="welcome-subtitle">打开数据库以查看结构</div>
+                </div>
+            `;
+
+            switchTab('welcome');
+
+            showToast('数据库已关闭', 'warning');
+        }
+
+        function refreshDatabase() {
+            if (currentDatabase) {
+                loadDatabaseInfo();
+                if (currentTable) {
+                    loadTableData(currentTable);
+                }
+                showToast('已刷新', 'success');
+            }
+        }
+
+        function renderSidebar(info) {
+            let html = '';
+            
+            html += `
+                <div class="tree-node">
+                    <div class="tree-item" data-item-type="database">
+                        <span class="tree-toggle" onclick="toggleFolder(this)">▼</span>
+                        <span class="tree-icon folder">📁</span>
+                        <span class="tree-label">表</span>
+                        <span class="tree-badge">${info.tables.filter(t => t.type === 'table').length}</span>
+                    </div>
+                    <div class="tree-children">
+            `;
+
+            const tables = info.tables.filter(t => t.type === 'table');
+            tables.forEach(table => {
+                html += `
+                    <div class="tree-node">
+                        <div class="tree-item" data-item-type="table" data-table-name="${table.name}" onclick="selectTable('${table.name}')">
+                            <span class="tree-icon table">📋</span>
+                            <span class="tree-label">${table.name}</span>
+                        </div>
+                    </div>
+                `;
+            });
+
+            html += `
+                    </div>
+                </div>
+            `;
+
+            const views = info.tables.filter(t => t.type === 'view');
+            if (views.length > 0) {
+                html += `
+                    <div class="tree-node">
+                        <div class="tree-item" data-item-type="database">
+                            <span class="tree-toggle" onclick="toggleFolder(this)">▼</span>
+                            <span class="tree-icon folder">📁</span>
+                            <span class="tree-label">视图</span>
+                            <span class="tree-badge">${views.length}</span>
+                        </div>
+                        <div class="tree-children">
+                `;
+
+                views.forEach(view => {
+                    html += `
+                        <div class="tree-node">
+                            <div class="tree-item" data-item-type="view" data-table-name="${view.name}" onclick="selectTable('${view.name}')">
+                                <span class="tree-icon view">👁️</span>
+                                <span class="tree-label">${view.name}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (info.indexes.length > 0) {
+                html += `
+                    <div class="tree-node">
+                        <div class="tree-item" data-item-type="database">
+                            <span class="tree-toggle" onclick="toggleFolder(this)">▶</span>
+                            <span class="tree-icon folder">📁</span>
+                            <span class="tree-label">索引</span>
+                            <span class="tree-badge">${info.indexes.length}</span>
+                        </div>
+                        <div class="tree-children" style="display: none;">
+                `;
+
+                info.indexes.forEach(index => {
+                    html += `
+                        <div class="tree-node">
+                            <div class="tree-item" data-item-type="index">
+                                <span class="tree-icon index">🔍</span>
+                                <span class="tree-label">${index.name}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            if (info.triggers.length > 0) {
+                html += `
+                    <div class="tree-node">
+                        <div class="tree-item" data-item-type="database">
+                            <span class="tree-toggle" onclick="toggleFolder(this)">▶</span>
+                            <span class="tree-icon folder">📁</span>
+                            <span class="tree-label">触发器</span>
+                            <span class="tree-badge">${info.triggers.length}</span>
+                        </div>
+                        <div class="tree-children" style="display: none;">
+                `;
+
+                info.triggers.forEach(trigger => {
+                    html += `
+                        <div class="tree-node">
+                            <div class="tree-item" data-item-type="trigger">
+                                <span class="tree-icon trigger">⚡</span>
+                                <span class="tree-label">${trigger.name}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            }
+
+            elements.sidebarContent.innerHTML = html;
+        }
+
+        function toggleFolder(element) {
+            const parent = element.closest('.tree-node');
+            const children = parent.querySelector('.tree-children');
+            if (children) {
+                if (children.style.display === 'none') {
+                    children.style.display = 'block';
+                    element.textContent = '▼';
+                } else {
+                    children.style.display = 'none';
+                    element.textContent = '▶';
+                }
+            }
+        }
+
+        function filterTables() {
+            const searchTerm = elements.searchTables.value.toLowerCase();
+            const treeItems = elements.sidebarContent.querySelectorAll('.tree-item[data-item-type="table"], .tree-item[data-item-type="view"]');
+            
+            treeItems.forEach(item => {
+                const label = item.querySelector('.tree-label').textContent.toLowerCase();
+                const node = item.closest('.tree-node');
+                if (searchTerm === '' || label.includes(searchTerm)) {
+                    node.style.display = 'block';
+                } else {
+                    node.style.display = 'none';
+                }
+            });
+        }
+
+        async function selectTable(tableName) {
+            currentTable = tableName;
+            currentPage = 1;
+            sortColumn = null;
+            sortOrder = 'asc';
+
+            document.querySelectorAll('.tree-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            const treeItem = document.querySelector(`.tree-item[data-table-name="${tableName}"]`);
+            if (treeItem) {
+                treeItem.classList.add('active');
+            }
+
+            const tableInfo = currentDatabase.tables.find(t => t.name === tableName);
+            if (tableInfo) {
+                elements.propTableName.textContent = tableName;
+                elements.propTableType.textContent = tableInfo.type === 'table' ? '表' : '视图';
+                elements.tablePropsGroup.style.display = 'block';
+            }
+
+            await Promise.all([
+                loadTableData(tableName),
+                loadTableSchema(tableName)
+            ]);
+
+            addTableTab(tableName);
+            elements.btnExport.disabled = false;
+        }
+
+        async function loadTableData(tableName, options = {}) {
+            if (!window.sqliteAPI) return;
+            
+            const result = await window.sqliteAPI.getTableData(tableName, {
+                page: currentPage,
+                pageSize: pageSize,
+                orderBy: sortColumn ? `${sortColumn} ${sortOrder}` : ''
+            });
+
+            if (result.error) {
+                showToast(result.error, 'error');
+                return;
+            }
+
+            currentTableData = result;
+            elements.propTableRows.textContent = result.total;
+
+            renderTableData(result);
+            renderPagination(result);
+        }
+
+        function renderTableData(data) {
+            const tabPanel = ensureTableTab(currentTable);
+            if (!tabPanel) return;
+
+            let html = '<div class="table-container"><table class="data-table"><thead><tr>';
+            html += '<th class="row-number">#</th>';
+            data.columns.forEach(col => {
+                const sortIcon = sortColumn === col.name ? 
+                    (sortOrder === 'asc' ? 'sorted-asc' : 'sorted-desc') : '';
+                html += `<th class="${sortIcon}" onclick="sortByColumn('${col.name}')">
+                    ${col.name}
+                    <span style="font-size: 10px; color: var(--text-secondary); font-weight: normal;">(${col.type})</span>
+                    ${col.isPrimaryKey ? '<span class="pk-indicator">🔑</span>' : ''}
+                </th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            const startIndex = (currentPage - 1) * pageSize + 1;
+            data.rows.forEach((row, idx) => {
+                html += '<tr>';
+                html += `<td class="row-number">${startIndex + idx}</td>`;
+                data.columns.forEach(col => {
+                    const value = row[col.name];
+                    let className = '';
+                    let displayValue = value;
+
+                    if (value === null) {
+                        className = 'null-value';
+                        displayValue = 'NULL';
+                    } else if (typeof value === 'number') {
+                        className = 'number-value';
+                    }
+
+                    html += `<td class="${className}" title="${escapeHtml(String(value))}">${escapeHtml(String(displayValue))}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            html += `
+                <div class="pagination">
+                    <div class="pagination-info">
+                        共 ${data.total} 行 | 第 ${currentPage} / ${data.totalPages} 页
+                    </div>
+                    <div class="pagination-controls">
+                        <button class="pagination-btn" onclick="goToPage(1)" ${currentPage === 1 ? 'disabled' : ''}>首页</button>
+                        <button class="pagination-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>上一页</button>
+                        <span>第</span>
+                        <input type="number" class="pagination-input" value="${currentPage}" min="1" max="${data.totalPages}" onkeypress="handlePageInput(event)">
+                        <span>页</span>
+                        <button class="pagination-btn" onclick="goToPage(${currentPage + 1})" ${currentPage >= data.totalPages ? 'disabled' : ''}>下一页</button>
+                        <button class="pagination-btn" onclick="goToPage(${data.totalPages})" ${currentPage >= data.totalPages ? 'disabled' : ''}>末页</button>
+                        <select class="pagination-input" onchange="changePageSize(this.value)">
+                            <option value="50" ${pageSize === 50 ? 'selected' : ''}>50</option>
+                            <option value="100" ${pageSize === 100 ? 'selected' : ''}>100</option>
+                            <option value="200" ${pageSize === 200 ? 'selected' : ''}>200</option>
+                            <option value="500" ${pageSize === 500 ? 'selected' : ''}>500</option>
+                            <option value="1000" ${pageSize === 1000 ? 'selected' : ''}>1000</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+
+            tabPanel.innerHTML = html;
+        }
+
+        async function loadTableSchema(tableName) {
+            if (!window.sqliteAPI) return;
+            
+            const schema = await window.sqliteAPI.getTableSchema(tableName);
+            
+            if (schema.error) {
+                console.error('Failed to load schema:', schema.error);
+                return;
+            }
+
+            let schemaHtml = '<table class="schema-table"><thead><tr>';
+            schemaHtml += '<th>#</th><th>列名</th><th>类型</th><th>非空</th><th>默认值</th></tr></thead><tbody>';
+            
+            schema.columns.forEach(col => {
+                schemaHtml += `<tr>
+                    <td>${col.cid}</td>
+                    <td>${col.name}${col.isPrimaryKey ? ' 🔑' : ''}</td>
+                    <td>${col.type || '-'}</td>
+                    <td>${col.notNull ? '✓' : '-'}</td>
+                    <td>${col.defaultValue || '-'}</td>
+                </tr>`;
+            });
+            
+            schemaHtml += '</tbody></table>';
+            elements.schemaTableContainer.innerHTML = schemaHtml;
+            elements.schemaGroup.style.display = 'block';
+
+            if (schema.createSql) {
+                elements.createSqlCode.textContent = schema.createSql;
+                elements.createSqlGroup.style.display = 'block';
+            } else {
+                elements.createSqlGroup.style.display = 'none';
+            }
+        }
+
+        function sortByColumn(columnName) {
+            if (sortColumn === columnName) {
+                sortOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+            } else {
+                sortColumn = columnName;
+                sortOrder = 'asc';
+            }
+            loadTableData(currentTable);
+        }
+
+        function goToPage(page) {
+            if (!currentTableData) return;
+            if (page < 1 || page > currentTableData.totalPages) return;
+            currentPage = page;
+            loadTableData(currentTable);
+        }
+
+        function handlePageInput(event) {
+            if (event.key === 'Enter') {
+                const page = parseInt(event.target.value);
+                goToPage(page);
+            }
+        }
+
+        function changePageSize(size) {
+            pageSize = parseInt(size);
+            currentPage = 1;
+            loadTableData(currentTable);
+        }
+
+        function addQueryTab() {
+            const existingTab = document.querySelector('.tab[data-tab="query"]');
+            if (!existingTab) {
+                const tabHtml = `
+                    <div class="tab" data-tab="query">
+                        <span>📝</span> SQL 查询
+                    </div>
+                `;
+                elements.tabsContainer.insertAdjacentHTML('beforeend', tabHtml);
+            }
+        }
+
+        function addTableTab(tableName) {
+            const existingTab = document.querySelector(`.tab[data-tab="table-${tableName}"]`);
+            if (!existingTab) {
+                const tabHtml = `
+                    <div class="tab" data-tab="table-${tableName}">
+                        <span>📋</span> ${tableName}
+                    </div>
+                `;
+                elements.tabsContainer.insertAdjacentHTML('beforeend', tabHtml);
+            }
+            
+            const panelId = `panel-table-${tableName}`;
+            let panel = document.getElementById(panelId);
+            if (!panel) {
+                panel = document.createElement('div');
+                panel.id = panelId;
+                panel.className = 'tab-panel';
+                document.querySelector('.tab-content').appendChild(panel);
+            }
+
+            switchTab(`table-${tableName}`);
+        }
+
+        function ensureTableTab(tableName) {
+            const panelId = `panel-table-${tableName}`;
+            return document.getElementById(panelId);
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-panel').forEach(panel => {
+                panel.classList.remove('active');
+            });
+
+            const tab = document.querySelector(`.tab[data-tab="${tabId}"]`);
+            if (tab) {
+                tab.classList.add('active');
+            }
+
+            const panel = document.getElementById(`panel-${tabId}`);
+            if (panel) {
+                panel.classList.add('active');
+            }
+
+            activeTab = tabId;
+        }
+
+        async function executeSql() {
+            const sql = elements.sqlEditor.value.trim();
+            if (!sql) {
+                showToast('请输入 SQL 语句', 'warning');
+                return;
+            }
+
+            if (!window.sqliteAPI) return;
+
+            elements.sqlStatus.innerHTML = '<span class="sql-status-success">执行中...</span>';
+            
+            const startTime = performance.now();
+            const result = await window.sqliteAPI.executeSql(sql);
+            const duration = (performance.now() - startTime).toFixed(2);
+
+            if (result.success) {
+                if (result.type === 'query') {
+                    elements.sqlStatus.innerHTML = `<span class="sql-status-success">✓ 成功</span> | 返回 ${result.rowCount} 行 | 耗时 ${duration}ms`;
+                    renderQueryResults(result.data);
+                } else {
+                    elements.sqlStatus.innerHTML = `<span class="sql-status-success">✓ 成功</span> | 影响 ${result.changes} 行 | 耗时 ${duration}ms`;
+                    elements.sqlResultsEmpty.style.display = 'flex';
+                    elements.sqlResultsEmpty.textContent = `语句执行成功，影响 ${result.changes} 行`;
+                    refreshDatabase();
+                }
+            } else {
+                elements.sqlStatus.innerHTML = `<span class="sql-status-error">✗ 错误</span> | 耗时 ${duration}ms`;
+                elements.sqlResultsEmpty.style.display = 'flex';
+                elements.sqlResultsEmpty.innerHTML = `<div style="color: var(--text-error);">${escapeHtml(result.error)}</div>`;
+            }
+        }
+
+        function renderQueryResults(data) {
+            if (!data || data.length === 0) {
+                elements.sqlResultsEmpty.style.display = 'flex';
+                elements.sqlResultsEmpty.textContent = '查询返回空结果';
+                return;
+            }
+
+            elements.sqlResultsEmpty.style.display = 'none';
+
+            const columns = Object.keys(data[0]);
+            
+            let html = '<table class="data-table"><thead><tr>';
+            columns.forEach(col => {
+                html += `<th>${col}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            data.forEach(row => {
+                html += '<tr>';
+                columns.forEach(col => {
+                    const value = row[col];
+                    let className = '';
+                    let displayValue = value;
+
+                    if (value === null) {
+                        className = 'null-value';
+                        displayValue = 'NULL';
+                    } else if (typeof value === 'number') {
+                        className = 'number-value';
+                    }
+
+                    html += `<td class="${className}" title="${escapeHtml(String(value))}">${escapeHtml(String(displayValue))}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            
+            elements.sqlResultsContainer.innerHTML = html;
+        }
+
+        async function exportTable() {
+            if (!currentTable) return;
+            
+            if (!window.sqliteAPI) return;
+
+            const result = await window.sqliteAPI.showSaveDialog({
+                title: '导出为 CSV',
+                filters: [
+                    { name: 'CSV 文件', extensions: ['csv'] }
+                ],
+                defaultPath: `${currentTable}.csv`
+            });
+
+            if (result.canceled) return;
+
+            const exportResult = await window.sqliteAPI.exportToCsv(currentTable, result.filePath);
+            
+            if (exportResult.success) {
+                showToast(`已导出到: ${result.filePath}`, 'success');
+            } else {
+                showToast(exportResult.error, 'error');
+            }
+        }
+
+        function copyResults() {
+            const table = elements.sqlResultsContainer.querySelector('table');
+            if (!table) {
+                showToast('没有可复制的结果', 'warning');
+                return;
+            }
+
+            let text = '';
+            const rows = table.querySelectorAll('tr');
+            rows.forEach((row, rowIdx) => {
+                const cells = row.querySelectorAll('th, td');
+                const rowText = Array.from(cells).map(cell => cell.textContent).join('\t');
+                text += rowText + '\n';
+            });
+
+            navigator.clipboard.writeText(text).then(() => {
+                showToast('已复制到剪贴板', 'success');
+            }).catch(() => {
+                showToast('复制失败', 'error');
+            });
+        }
+
+        function escapeHtml(text) {
+            if (text === null || text === undefined) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function showToast(message, type = 'success') {
+            const existingToast = document.querySelector('.toast');
+            if (existingToast) {
+                existingToast.remove();
+            }
+
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        init();
+    </script>
+</body>
+</html>
