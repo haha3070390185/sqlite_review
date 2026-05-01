@@ -1,0 +1,2 @@
+# sqlite_review
+可视化sqlite，再也不用担心更新的数据在sqlite不方便查看了
